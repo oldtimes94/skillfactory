@@ -3,10 +3,27 @@ package main
 import (
 	"container/ring"
 	"fmt"
+	"go.uber.org/zap"
 	"time"
 )
 
+var logger *zap.Logger
+
+func init() {
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+
+	defer logger.Sync()
+
+}
+
 func ReadInts() chan int {
+
+	defer logger.Info("ReadInts channel inited")
+
 	out := make(chan int)
 	var value int
 
@@ -14,9 +31,10 @@ func ReadInts() chan int {
 		for {
 			_, err := fmt.Scanln(&value)
 			if err != nil {
-				fmt.Println(err)
+				logger.Error(err.Error(), zap.String("func", "ReadInts"))
 				continue
 			}
+			logger.Info("[ReadInts] Sending value to out chan", zap.Int("value", value))
 			out <- value
 		}
 	}()
@@ -24,12 +42,15 @@ func ReadInts() chan int {
 }
 
 func NegativeNumberFilter(ints chan int) chan int {
+
+	defer logger.Info("NegativeNumberFilter channel inited")
+
 	out := make(chan int)
 
 	go func() {
 		for value := range ints {
 			if value < 0 {
-				fmt.Println("Value < 0, filtered:", value)
+				logger.Info("Value < 0, filtered: ", zap.Int("value", value))
 				continue
 			}
 			out <- value
@@ -39,12 +60,14 @@ func NegativeNumberFilter(ints chan int) chan int {
 }
 
 func MultipleOfThreeFilter(ints chan int) chan int {
+	defer logger.Info("MultipleOfThreeFilter channel inited")
+
 	out := make(chan int)
 
 	go func() {
 		for value := range ints {
 			if value%3 != 0 || value == 0 {
-				fmt.Println("Value % 3 != 0, filtered:", value)
+				logger.Info("Value % 3 != 0 filtered", zap.Int("value", value))
 				continue
 			}
 			out <- value
@@ -72,7 +95,7 @@ func main() {
 			select {
 			case <-TruncateBufferTicker.C:
 				RingBuffer = ring.New(RingBufferSize)
-				fmt.Println("It's time to truncate buffer")
+				logger.Info("Truncating bugger (timer)")
 			}
 		}
 	}()
@@ -80,15 +103,14 @@ func main() {
 	for value := range MultpleOfThreeChannel {
 		RingBuffer.Value = value
 		RingBuffer = RingBuffer.Next()
-		fmt.Println("Received Value", value)
+		logger.Info("Received Value", zap.Int("value", value))
 
 		n := RingBuffer.Len()
-		fmt.Printf("Current buffer: ")
+		logger.Info("Current buffer")
 		for j := 0; j < n; j++ {
-			fmt.Printf("%v ", RingBuffer.Value)
+			logger.Info("Buffer", zap.Int("index", j), zap.Any("value", RingBuffer.Value))
 			RingBuffer = RingBuffer.Next()
 		}
-		fmt.Println("")
 
 	}
 
